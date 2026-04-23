@@ -5,18 +5,64 @@ from app import BASE_DIR
 from app.cruds.bot_user_message import get_message_history
 from app.database import AsyncSessionLocal
 from app.models.bot_user_message import BotUserMessage
-from app.models.bot_command import BotCommand
 from app.models.bot_user import BotUser
 from markupsafe import Markup
 from starlette.responses import RedirectResponse
 
 from app.models.source import Source
+from app.models.system_setting import SystemSetting
 from app.utils.common import clean_response_for_chat
+
+class SystemSettingAdmin(ModelView, model=SystemSetting):
+    name_plural = name = "Системные настройки"
+    icon = "fa-solid fa-gears"
+    column_default_sort = ("key", True)
+
+    column_list = ["key", "value", "description"]
+    
+    column_labels = {
+        "key": "ключ",
+        "value": "значение",
+        "description": "описание"
+    }
+
+    form_args = {
+        "key": {
+            "label": "Ключ",
+            "render_kw": {
+                "placeholder": "ключ",
+                "class": "form-control", # Обязательно для стиля Tabler
+                "style": "height: 38px;" # Если нужно подровнять высоту под кнопку
+            }
+        },
+        "value": {
+            "label": "Значение",
+            "render_kw": {
+                "placeholder": "значение",
+                "class": "form-control",
+                "style": "height: 38px;"
+            }
+        },
+        "description": {
+            "label": "Описание",
+            "render_kw": {
+                "placeholder": "описание (никак не влияет на работу)",
+                "class": "form-control",
+                "style": "height: 38px;"
+            }
+        }
+    }
+
+    #edit_template = "admin/edit_settings.html"
+    create_template = "admin/edit_settings.html"
+    
+
 
 class SourceAdmin(ModelView, model=Source):
     name_plural = name = "Источники знаний"
     icon = "fa-solid fa-brain"
     column_list = [Source.active, Source.id, Source.url, Source.meta_type, Source.meta_sub_type, Source.cache_time, Source.settings]
+    
     column_labels = {
         Source.active: "Активность",
         Source.id: "id",
@@ -26,7 +72,7 @@ class SourceAdmin(ModelView, model=Source):
         Source.cache_time: "Время актуальности",
         Source.settings: "Настройки"
     }
-    #form_columns = [BotCommand.is_active, BotCommand.command, BotCommand.text]
+    
     form_args = {
         "settings": {  
             "render_kw": {
@@ -114,7 +160,7 @@ class ChatAssistantAdmin(BaseView):
         content = ""
 
         async with AsyncSessionLocal() as session:
-            history = await get_message_history(session, chat_id=123456789, limit=10)
+            history = await get_message_history(session, chat_id="admin_panel", limit=10)
         if history:
             for message in history:
                 text = message.text.split("Вопрос:")

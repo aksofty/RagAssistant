@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status, Request
 from app.assistants.gigachat_assistant import GigaChatAssistant
 from app.config import Config
 from app.cruds.bot_user import get_add_bot_user
+from app.cruds.bot_user_message import can_user_ask
 from app.database import AsyncSessionLocal
 from typing import Annotated
 from app.schemas.ask import AIQuestion, AIResponse
@@ -28,8 +29,18 @@ async def ask_node(
     
     try:
         async with AsyncSessionLocal() as session:
-            await get_add_bot_user(session, chat_id='123456789', name="Andrei")
-            response = await assistant.ask(query=request.question, chat_id='123456789', max_asimilarity=5, min_score=310)
+
+            can_ask = await can_user_ask(session=session, chat_id=request.user_id, delay=10)
+
+            if not can_ask:
+                return AIResponse(
+                    user_id=request.user_id,
+                    question=request.question,
+                    answer="Вы слишком часто задаете вопросы, подождите немного..."
+                )
+
+            await get_add_bot_user(session, request.user_id, name="Andrei")
+            response = await assistant.ask(query=request.question, chat_id=request.user_id, max_asimilarity=5, min_score=310)
 
         
         return AIResponse(

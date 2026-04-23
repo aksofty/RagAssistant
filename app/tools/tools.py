@@ -1,5 +1,6 @@
 import httpx
 from langchain_core.tools import tool
+from loguru import logger
 
 @tool
 async def get_order_info(email: str|None=None) -> str:
@@ -142,13 +143,13 @@ async def get_product_info(articul: str) -> str:
             if 'offer' in data and data['offer']:
                 offer = data['offer']
                 offer_str =  f"""Модель: {offer.get('name')}, производитель: {offer.get('vendor', 'не указан')}, цена: {offer.get('price', 'не указано')}, артикул: {offer.get('articul', 'не указан')}, масштаб: {offer.get('scale', 'не указан')},ссылка: {offer.get('link', 'нет')}"""
-                print(offer['images'])
                 if 'images' in offer and offer['images']:
                     offer_str += f"\nФото: {', '.join(offer['images'])}"
                 return offer_str
                
         except ValueError as e:
-            print(f"Ой, ошибка: {e}")
+            logger.warning(f"Ой, ошибка: {e}")
+            
 
     return f"Новинки не найдены."  
 

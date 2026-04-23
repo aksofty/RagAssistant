@@ -1,0 +1,20 @@
+{% extends "sqladmin/create.html" %}
+----------------------------------------------
+{% block content %}
+<style>
+    .form-fieldset {
+        display: flex;
+        gap: 10px;
+        align-items: flex-end;
+    }
+    .form-fieldset > div {
+        flex: 1;
+        margin-bottom: 0 !important;
+        margin-right: 0 !important;
+    }
+    .form-fieldset > div > div {width: 100%;}
+    
+    .form-label {display: none;}
+</style>
+{{ super() }}
+{% endblock %}

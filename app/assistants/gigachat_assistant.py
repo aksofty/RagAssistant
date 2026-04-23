@@ -5,6 +5,7 @@ import uuid
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage, AIMessage
 from langchain_gigachat import GigaChat, GigaChatEmbeddings
 from langchain_community.vectorstores import FAISS
+from loguru import logger
 from app.cruds.bot_user import AsyncSessionLocal
 from app.cruds.bot_user_message import add_bot_user_message, get_message_history
 from app.models.bot_user_message import MessageType
@@ -71,27 +72,29 @@ class GigaChatAssistant:
 
     async def sync_indices(self):
         """Проверяет каждый файл и собирает общую базу в памяти."""
+        logger.info(f"Синхронизируем векторную базу")
+
         all_stores = []
 
         for source in self.rag_sources:
             path = get_rag_cache_path(source=source, cache_dir=self.cache_dir)    
-            doc_type = get_file_type(path)
+            #doc_type = get_file_type(path)
 
             # Уникальное имя папки для индекса этого файла
             file_hash = base64.b64encode(os.path.basename(path).encode()).decode()[:50]
             index_folder = os.path.join(self.faiss_dir, f"idx_{file_hash}")
 
             if self._needs_update(path, index_folder):
-                print(f"[Обновление] Файл {path} (тип: {doc_type}) требует переиндексации...")
+                logger.info(f"Файл {path} требует переиндексации...")
                 processor = DocumentProcessor(source=source)
                 docs = await processor.process_document()
                 if docs:
                     store = await FAISS.afrom_documents(docs, self.embeddings)
                     store.save_local(index_folder)
                     all_stores.append(store)
+                    logger.info(f"Файл {path} обновлен.")
             else:
-                print(f"[Загрузка] Используем кеш для {index_folder}")
-
+                logger.info(f"Используем кеш для {path}")
                 store = FAISS.load_local(index_folder, self.embeddings, allow_dangerous_deserialization=True)
                 all_stores.append(store)
 
@@ -100,7 +103,9 @@ class GigaChatAssistant:
             self.vector_store = all_stores[0]
             for next_store in all_stores[1:]:
                 self.vector_store.merge_from(next_store)
-            print("[Готово] Общая векторная база собрана.")
+            logger.info("Векторная база собрана")
+        else:
+            logger.warning("Нет данных для векторной базы")
 
 
     #async def ask(self, query: str, history: List[BaseMessage] = [], max_asimilarity: int = 5, min_score: float = 200) -> str:
@@ -111,29 +116,13 @@ class GigaChatAssistant:
         
         context = await self._get_context(
             query=query, max_asimilarity=max_asimilarity, min_score=min_score)
-        '''if context:
-            context_query = f"\n----\nТЕКУЩИЙ КОНТЕКСТ: {context}\n----\n Вопрос: {query}"
-        else:   
-            context_query = f"{query}"'''
-        
-        #messages = [system_message] + history + [HumanMessage(content=context_query)]
 
         system_prompt = await self._load_prompt(file_path=self.system_prompt_path)
         system_prompt = system_prompt.replace("{context}", context)
-
-        #print(system_prompt)
         
         system_message = SystemMessage(content=f"""{system_prompt}""")
         messages = [system_message] + history + [HumanMessage(content=query)]
-
-        '''k=0
-        for message in messages:
-            k+=1
-            print(f"{k}: {message.content}")
-            print("-------------------------------------------------------------")'''
         
-
-
         # Запускаем модель с инструментами
         response_with_tools, tool_messages = await self._run_model_with_tools(messages=messages)
         if response_with_tools:
@@ -162,7 +151,7 @@ class GigaChatAssistant:
         first_doc_skip = True
 
         for doc, score in docs_with_scores:
-            print(f"Found doc: {doc.metadata['source']} with score {score}")
+            logger.info(f"Найдено совпадение векторов в документе {doc.metadata['source']}. Вес: {score}")
             
             if doc.metadata['type'] == 'Каталог':
                 first_doc_skip = False    
@@ -191,10 +180,7 @@ class GigaChatAssistant:
             doc_string = f"--- ИСТОЧНИК: {doc.metadata['source']} ({doc_type_sting}) ---\n"
             doc_string += f"СОДЕРЖАНИЕ: {doc.page_content}. \n{'. '.join(metadata_extra)}\n\n"
 
-            #print(doc_string)    
-            
             context += doc_string
-            #context += f"{doc.page_content}. {'. '.join(metadata_extra)};"  
 
         return context  
         
@@ -202,7 +188,6 @@ class GigaChatAssistant:
 
         tool_messages = messages
 
-        #print(messages)
 
         # Ограничиваем 2 итерациями, чтобы не зациклиться
         for i in range(iter_nums):
@@ -230,7 +215,7 @@ class GigaChatAssistant:
                     #if "chat_id" in args or tool_name == "send_product_photo":
                         #args["chat_id"] = chat_id
 
-                    print(f"--- Вызов функции {tool_name} с аргументами {args}")
+                    logger.info(f"Вызов {tool_name} с аргументами {args}")
                     
                     # Выполняем инструмент
                     result = await tool_to_call.ainvoke(args)
@@ -268,7 +253,7 @@ class GigaChatAssistant:
     async def _load_prompt(self, file_path: str = None) -> str:
         if file_path is None:
             file_path = os.path.join(f"{BASE_DIR}", 'PROMPT.md')
-            #print(file_path)
+
 
 
         with open(file_path, "r", encoding="utf-8") as f:

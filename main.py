@@ -1,14 +1,18 @@
 from fastapi import FastAPI
 from sqladmin import Admin
 import uvicorn
-from app import BASE_DIR
+from app import CLIENT_LOG_FILE
 from app.admin.admin_auth import AdminAuth
-from app.admin.views import BotUserAdmin, BotUserMessageAdmin, PromptEditorAdmin, ChatAssistantAdmin, SourceAdmin
+from app.admin.views import BotUserAdmin, BotUserMessageAdmin, PromptEditorAdmin, ChatAssistantAdmin, SourceAdmin, SystemSettingAdmin
 from app.config import Config
 from app.lifespan import lifespan
 from app.routers import ask
 from app.database import engine
+from loguru import logger
 
+logger.remove()
+logger.add(lambda msg: print(msg, end=""), level="DEBUG")
+logger.add(CLIENT_LOG_FILE, rotation="1 MB")
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(ask.router)
@@ -22,10 +26,12 @@ admin.add_view(PromptEditorAdmin)
 admin.add_view(BotUserAdmin)
 admin.add_view(BotUserMessageAdmin)
 admin.add_view(SourceAdmin)
+admin.add_view(SystemSettingAdmin)
 
     
 
 def main():
+    logger.info("Starting application...")
     uvicorn.run(
         "main:app", 
         host="0.0.0.0", 
