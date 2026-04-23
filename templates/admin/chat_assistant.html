@@ -1,0 +1,190 @@
+{% extends "sqladmin/layout.html" %}
+
+{% block content %}
+<style>
+    :root {
+        --chat-bg: #ffffff;
+        --user-msg: #e1f5fe;
+        --bot-msg: #f1f1f1;
+        --accent: #007aff;
+        --border: #e5e5ea;
+        --text-hint: #8e8e93;
+    }
+
+    /* Главный контейнер-ограничитель */
+    .chat-outer-container {
+        max-width: 600px; /* Занимает примерно половину ширины на Full HD */
+        margin: 0 auto;   /* Центрирование */
+        width: 100%;
+    }
+
+    /* Контейнер чата адаптируется к высоте экрана */
+    .chat-wrapper {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 180px); 
+        min-height: 500px;
+        background: var(--chat-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); /* Легкая тень для объема */
+    }
+
+    #chat-box {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        background-color: #f9f9f9;
+        /* Фон как в Telegram (опционально) */
+        background-image: url('https://transparenttextures.com');
+    }
+
+    .message {
+        max-width: 85%;
+        padding: 10px 15px;
+        border-radius: 18px;
+        margin-bottom: 12px;
+        font-size: 15px;
+        line-height: 1.4;
+        word-wrap: break-word;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .message img {
+        border-bottom: 1px solid #bbbbbb;
+    }
+
+    .user {
+        align-self: flex-end;
+        background: var(--user-msg);
+        border-bottom-right-radius: 4px;
+    }
+
+    .bot {
+        align-self: flex-start;
+        background: var(--bot-msg);
+        border-bottom-left-radius: 4px;
+    }
+
+    #input-container {
+        padding: 15px 20px;
+        background: #fff;
+        display: flex;
+        gap: 12px;
+        border-top: 1px solid var(--border);
+    }
+
+    #userInput {
+        flex: 1;
+        border: 1px solid var(--border);
+        background: #f2f2f7;
+        padding: 12px 20px;
+        border-radius: 25px;
+        outline: none;
+        font-size: 15px;
+    }
+
+    #sendBtn {
+        background: none;
+        border: none;
+        color: var(--accent);
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    #sendBtn:disabled { opacity: 0.4; }
+
+
+
+    /* Индикатор "Думает" */
+    .thinking { color: var(--text-hint); font-size: 14px; display: flex; align-items: center; gap: 8px; padding: 5px; }
+    .loader { display: flex; gap: 3px; }
+    .dot { width: 4px; height: 4px; background: #999; border-radius: 50%; animation: bounce 1.4s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%, 100% { transform: scale(0.3); opacity: 0.3; } 50% { transform: scale(1.1); opacity: 1; } }
+</style>
+
+<div class="col-12">
+    <!-- Обертка для центрирования -->
+    <div class="chat-outer-container">
+        <div class="chat-wrapper">
+            <div id="chat-box">
+                {{content}}
+            </div>
+            
+            <div id="input-container">
+                <input type="text" id="userInput" placeholder="Напишите сообщение..." autocomplete="off">
+                <button id="sendBtn" onclick="sendQuestion()">Отправить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chatBox = document.getElementById('chat-box');
+    const input = document.getElementById('userInput');
+    const btn = document.getElementById('sendBtn');
+    const FAST_API_KEY = "chat_key"; 
+
+    function addMessage(text, side) {
+        const div = document.createElement('div');
+        div.className = `message ${side}`;
+        // Безопасная замена переносов строк на HTML-переносы
+        div.innerHTML = text.replace(/\n/g, '<br>');
+        chatBox.appendChild(div);
+        chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
+        return div;
+    }
+
+    async function sendQuestion() {
+        const text = input.value.trim();
+        if (!text || btn.disabled) return;
+
+        addMessage(text, 'user');
+        input.value = '';
+        btn.disabled = true;
+
+        const thinkingDiv = addMessage(`
+            <div class="thinking">
+                Ассистент думает
+                <div class="loader">
+                    <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                </div>
+            </div>`, 'bot');
+
+        try {
+            const response = await fetch('/ask', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'fast-api-key': FAST_API_KEY 
+                },
+                body: JSON.stringify({ user_id: "admin_panel", question: text })
+            });
+
+            thinkingDiv.remove();
+            btn.disabled = false;
+
+            if (!response.ok) {
+                const err = await response.json();
+                addMessage('⚠️ Ошибка: ' + (err.detail || 'Сервер не отвечает'), 'bot');
+            } else {
+                const data = await response.json();
+                const finalData = typeof data === 'string' ? JSON.parse(data) : data;
+                addMessage(finalData.answer, 'bot');
+            }
+        } catch (err) {
+            thinkingDiv.remove();
+            btn.disabled = false;
+            addMessage('❌ Ошибка сети: ' + err.message, 'bot');
+        }
+    }
+
+    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendQuestion(); });
+</script>
+{% endblock %}
